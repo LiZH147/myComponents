@@ -18,27 +18,37 @@ const wkDayArr = ['日', '一', '二', '三', '四', '五', '六'];
  * @param {Number} dayLength 规定获取日期列表的长度，默认为7
  * @returns 
  */
-function getmyDate(dayLength = 7) {
+function getmyDate(dayLength = 7, dataSource) {
   let curDate = new Date();
   const days = [];
-  for (let i = 0; i < dayLength; i++) {
-    let tempDate = new Date(curDate - 1000 * 60 * 60 * 24 * i);
-    let obj = {
-      date: tempDate.getDate().toString(),
-      wkDay: wkDayArr[tempDate.getDay()],
-      selected: i === 0 ? true : false,
-      enable: i === 0 ? true : false,
-    };
-    days.unshift(obj);
+  if (dataSource.length) {
+    days = dataSource.length;
+  } else {
+    for (let i = 0; i < dayLength; i++) {
+      let tempDate = new Date(curDate - 1000 * 60 * 60 * 24 * i);
+      let obj = {
+        date: tempDate.getDate().toString(),
+        wkDay: wkDayArr[tempDate.getDay()],
+        selected: i === 0 ? true : false,
+        enable: i === 0 ? true : false,   // 是否有数据
+      };
+      days.unshift(obj);
+    }
   }
-  return days;
+
+  const chunkDays = [];
+  for (let i = 0; i < days.length; i += 7) {
+    let temp = days.slice(i, i + 7);
+    chunkDays.push(temp);
+  }
+  return chunkDays;
 }
 
 const DateFlterView = (props) => {
   const flatListRef = useRef();
   const [beginOffset, setBeginOffset] = useState();
   const [endOffset, setEndOffset] = useState();
-  let daysTemp = getmyDate(props.dayLength);
+  let daysTemp = getmyDate(props.dayLength, props.dataSource);
   const [days, setDays] = useState(daysTemp);
   let todayStr = (new Date().getMonth() + 1).toString() + '月' + new Date().getDate().toString() + '日'
 
@@ -73,34 +83,39 @@ const DateFlterView = (props) => {
   /**
    * 这是组成FlatList的项，返回一个封装的组件
    * 此处定义点击函数，这里只是简单的编写了背景切换效果＋调用传入的点击函数
-   * 日期对象的selected和enabled属性对应是否选中，其中enabled对应无障碍的一些设置
+   * 日期对象的selected和enabled属性对应是否选中，其中enabled对应是否有记录
    * @param {Object} item 传入的属性，此处就是日期对象
    * @param {Number} index 该项的下标
    * @returns 封装好的组件
    */
-  const ListItem = ({ item, index }) => {
-    let aItmW = itemWidthTotal - itemSpace;
-    const { date, wkDay, selected, enabled } = item;
+  const ListItem = ({ items, index }) => {
     let dateStyles = [[styles.cell, { width: aItmW, height: aItmW }],
     [styles.cell, { backgroundColor: '#33ACFF', borderRadius: aItmW, width: aItmW, height: aItmW }]];
     let textStyle = [{ color: "rgba(153,153,153,0.4)" }, { color: "#000000" }, { color: "#99999966" }, { color: "#00000066" }, { color: "#FFFFFF" }];
 
+    const wkDaysCpn = items.map((item) => {
+      let aItmW = itemWidthTotal - itemSpace;
+      const { date, wkDay, selected, enabled } = item;
+
+      return (
+        <TouchableOpacity
+          style={[dateStyles[selected ? 1 : 0], { paddingTop: 4, paddingBottom: 4 }]}
+          onPress={() => {
+            let daysTemp = days;
+            daysTemp.forEach((item, idx) => {
+              if (item.selected === true) item.selected = false;
+            })
+            setDays(daysTemp)
+            props.dayButtonPressed();
+          }}>
+          <Text style={[{ fontSize: 12 }, selected ? textStyle[4] : enabled ? textStyle[0] : textStyle[2]]} >{wkDay}</Text>
+          <Text style={[{ fontSize: 16 }, selected ? textStyle[4] : enabled ? textStyle[1] : textStyle[3]]} >{date}</Text>
+        </TouchableOpacity>
+      );
+    })
     return (
-      <TouchableOpacity
-        style={[dateStyles[selected ? 1 : 0], { paddingTop: 4, paddingBottom: 4 }]}
-        onPress={() => {
-          let daysTemp = days;
-          daysTemp.forEach((item, idx) => {
-            if (item.selected === true) item.selected = false, item.enable = false;
-            if (idx === index) item.selected = true, item.enable = true;
-          })
-          setDays(daysTemp)
-          props.dayButtonPressed();
-        }}>
-        <Text style={[{ fontSize: 12 }, selected ? textStyle[4] : enabled ? textStyle[0] : textStyle[2]]} >{wkDay}</Text>
-        <Text style={[{ fontSize: 16 }, selected ? textStyle[4] : enabled ? textStyle[1] : textStyle[3]]} >{date}</Text>
-      </TouchableOpacity>
-    );
+      <View>{wkDaysCpn}</View>
+    )
   };
 
   return (
@@ -115,7 +130,7 @@ const DateFlterView = (props) => {
         style={{ marginBottom: 13, width: '100%' }}
         data={days}
         renderItem={({ item, index }) => <ListItem item={item} index={index} />}
-
+        pagingEnabled={true}
         horizontal={true}
         showsHorizontalScrollIndicator={true}
         initialNumToRender={days.length - 7}
@@ -128,7 +143,7 @@ const DateFlterView = (props) => {
           // 记录起始偏移量
           setBeginOffset(e.nativeEvent.contentOffset.x);
         }}
-        onScrollEndDrag={(e) => {
+        onMomentumScrollEnd={(e) => {
           // 记录抬手时的偏移量
           setEndOffset(e.nativeEvent.contentOffset.x);
           props.scrollModel ? scrollByWeek() : null;
