@@ -7,6 +7,10 @@ import {
 } from 'react-native';
 import React, { useRef, useState } from 'react';
 
+/**
+ * 默认加载30天的日期，自动补全7的倍数，即最终数据源为35天
+ */
+
 const Padding = 12;
 const NumColumns = 7;
 const itemSpace = 4;
@@ -14,25 +18,33 @@ const itemSpace = 4;
 const wkDayArr = ['日', '一', '二', '三', '四', '五', '六'];
 
 /**
- * 从今天起向前获取日期列表
+ * 从今天所在的周起向前获取日期列表
  * @param {Number} dayLength 规定获取日期列表的长度，默认为7
  * @returns 
  */
-function getmyDate(dayLength = 7, dataSource) {
+function getmyDate(dayLength = 14) {
   let curDate = new Date();
   const days = [];
-  if (dataSource.length) {
-    days = dataSource.length;
-  } else {
-    for (let i = 0; i < dayLength; i++) {
-      let tempDate = new Date(curDate - 1000 * 60 * 60 * 24 * i);
-      let obj = {
-        date: tempDate.getDate().toString(),
-        wkDay: wkDayArr[tempDate.getDay()],
-        selected: i === 0 ? true : false,
-        enable: i === 0 ? true : false,   // 是否有数据
-      };
-      days.unshift(obj);
+  // 向后填充，保证加载今天所在的一周
+  if (curDate.getDay() !== 6) {
+    let addLen = 6 - curDate.getDay();
+    let tempDate = curDate.getDate() + addLen;
+    curDate.setDate(tempDate);
+    dayLength += addLen;
+  }
+  for (let i = 0; i < dayLength; i++) {
+    let tempDate = new Date(curDate - 1000 * 60 * 60 * 24 * i);
+    let obj = {
+      date: tempDate.getDate().toString(),
+      wkDay: wkDayArr[tempDate.getDay()],
+      selected: i === 0 ? true : false,
+      enable: i === 0 ? true : false,   // 是否有数据
+    };
+    days.unshift(obj);
+
+    // 向前填充，向前挪起始日期保证总日期是7的倍数
+    if (i === dayLength - 1 && tempDate.getDay() !== 0) {
+      dayLength += tempDate.getDay();
     }
   }
 
@@ -57,19 +69,30 @@ const DateFlterView = (props) => {
     NumColumns +
     itemSpace;
 
+  function selectItem(indexs, index) {
+    let daysTemp = [...days];
+    daysTemp.forEach((items) => {
+      items.forEach(item => item.selected ? item.selected = false : null)
+    })
+    daysTemp[indexs][index].selected = true;
+    setDays(daysTemp)
+  }
+
   /**
    * 设置滑动切换一周的函数，
    * 根据滑动起始偏移量和结束偏移量计算方向，判断是否切换
    * @returns null
    */
   function scrollByWeek() {
-    if (endOffset === 0) {
+    // console.log('beginOffset,endOffset=====', beginOffset, endOffset)
+    if (endOffset >= (days.length - 1) * props.totalWidth - 200) {
       return;
     }
+    if (beginOffset === 0) return;
     let coefficient = 0;
     // 滑动超过屏幕宽度一半时才切换，利用coefficient做系数判断向左还是向右
-    if (Math.abs(endOffset - beginOffset) > itemWidthTotal * 3.5) {
-      this.endOffset > beginOffset ? (coefficient = -1) : (coefficient = 1);
+    if (Math.abs(endOffset - beginOffset) > itemWidthTotal * 2) {
+      endOffset > beginOffset ? (coefficient = -1) : (coefficient = +1);
     } else {
       coefficient = 0;
     }
@@ -77,7 +100,8 @@ const DateFlterView = (props) => {
       coefficient === 0
         ? beginOffset
         : beginOffset - coefficient * itemWidthTotal * 7;
-    flatListRef.current.scrollToOffset({ offset: finalOffset });
+    flatListRef.current.scrollToOffset({ animated: false, offset: finalOffset });
+    // flatListRef.current.scrollToIndex({ animated: false, index: coefficient })
   }
 
   /**
@@ -88,24 +112,19 @@ const DateFlterView = (props) => {
    * @param {Number} index 该项的下标
    * @returns 封装好的组件
    */
-  const ListItem = ({ items, index }) => {
+  const ListItem = ({ items, indexs }) => {
+    let aItmW = itemWidthTotal - itemSpace;
     let dateStyles = [[styles.cell, { width: aItmW, height: aItmW }],
     [styles.cell, { backgroundColor: '#33ACFF', borderRadius: aItmW, width: aItmW, height: aItmW }]];
     let textStyle = [{ color: "rgba(153,153,153,0.4)" }, { color: "#000000" }, { color: "#99999966" }, { color: "#00000066" }, { color: "#FFFFFF" }];
 
-    const wkDaysCpn = items.map((item) => {
-      let aItmW = itemWidthTotal - itemSpace;
+    const wkDaysCpn = items.map((item, index) => {
       const { date, wkDay, selected, enabled } = item;
-
       return (
         <TouchableOpacity
           style={[dateStyles[selected ? 1 : 0], { paddingTop: 4, paddingBottom: 4 }]}
           onPress={() => {
-            let daysTemp = days;
-            daysTemp.forEach((item, idx) => {
-              if (item.selected === true) item.selected = false;
-            })
-            setDays(daysTemp)
+            selectItem(indexs, index)
             props.dayButtonPressed();
           }}>
           <Text style={[{ fontSize: 12 }, selected ? textStyle[4] : enabled ? textStyle[0] : textStyle[2]]} >{wkDay}</Text>
@@ -114,7 +133,9 @@ const DateFlterView = (props) => {
       );
     })
     return (
-      <View>{wkDaysCpn}</View>
+      <View style={{ flexDirection: 'row', width: props.totalWidth, marginLeft: 2 }} key={indexs}>
+        {wkDaysCpn}
+      </View>
     )
   };
 
@@ -126,14 +147,16 @@ const DateFlterView = (props) => {
         </Text>
       </View>
       <FlatList
+        onLayout={() => { flatListRef.current.scrollToOffset({ animated: false, offset: (days.length - 1) * props.totalWidth }) }}
         ref={flatListRef}
         style={{ marginBottom: 13, width: '100%' }}
         data={days}
-        renderItem={({ item, index }) => <ListItem item={item} index={index} />}
+        renderItem={({ item, index }) => <ListItem items={item} indexs={index} />}
         pagingEnabled={true}
         horizontal={true}
         showsHorizontalScrollIndicator={true}
-        initialNumToRender={days.length - 7}
+        keyExtractor={(item, index) => index.toString()}
+        // initialNumToRender={days.length - 7}
         getItemLayout={(data, index) => ({
           length: (itemWidthTotal - itemSpace),
           offset: itemWidthTotal * index,
@@ -143,10 +166,10 @@ const DateFlterView = (props) => {
           // 记录起始偏移量
           setBeginOffset(e.nativeEvent.contentOffset.x);
         }}
-        onMomentumScrollEnd={(e) => {
+        onScrollEndDrag={(e) => {
           // 记录抬手时的偏移量
           setEndOffset(e.nativeEvent.contentOffset.x);
-          props.scrollModel ? scrollByWeek() : null;
+          props.scrollModel === 1 ? scrollByWeek() : null;
         }}
       />
       {props.extraHeader ? props.extraHeader() : null}
