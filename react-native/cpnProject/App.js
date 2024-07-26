@@ -1,6 +1,7 @@
 import { StatusBar } from 'expo-status-bar';
 import { Dimensions, StyleSheet, Text, View } from 'react-native';
 import DateFlterView from './components/DateFilterCpn/DateFilterView'
+import TimelineScale from './components/TimelineScale/TimelineScale';
 
 const SCREEN_WIDTH = Math.min(
   Dimensions.get('window').height,
@@ -11,7 +12,8 @@ export default function App() {
     <View style={styles.container}>
       <Text>Open up App.js to start working on your app!</Text>
       <StatusBar style="auto" />
-      <DateFlterView
+      <TimelineScale />
+      {/* <DateFlterView
         totalWidth={SCREEN_WIDTH}
         dayButtonPressed={() => { }}
         extraHeader={null}
@@ -19,7 +21,7 @@ export default function App() {
         scrollModel={1}
         // 从今天起的日期长度
         dayLength={30}
-      />
+      /> */}
     </View>
   );
 }
